@@ -1,10 +1,11 @@
 :root {
   --bg: #0b1020;
   --card: #111834;
-  --muted: #a4b3ce;
+  --muted: #8fa3c1;
   --text: #e8eefb;
   --brand: #5aa0ff;
   --accent: #46e0b7;
+  --danger: #ef4444;
 }
 
 * {
@@ -18,199 +19,102 @@ body {
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Pretendard, Noto Sans KR, sans-serif
 }
 
-.wrap {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column
-}
-
-.header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: rgba(10, 15, 30, .7);
-  backdrop-filter: blur(6px);
-  border-bottom: 1px solid rgba(255, 255, 255, .06)
-}
-
-.brand {
-  font-weight: 700
-}
-
-.grow {
-  flex: 1
-}
-
 .container {
-  max-width: 1100px;
-  margin: 16px auto;
-  padding: 0 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px
+  max-width: 980px;
+  margin: 24px auto;
+  padding: 16px
 }
 
 .card {
   background: var(--card);
-  border: 1px solid rgba(255, 255, 255, .07);
-  border-radius: 14px;
-  padding: 12px
+  border-radius: 16px;
+  padding: 16px 18px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .25)
 }
 
 .row {
   display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: 8px
+  gap: 16px;
+  flex-wrap: wrap
+}
+
+.col {
+  flex: 1 1 320px
+}
+
+h1 {
+  font-size: 22px;
+  margin: 0 0 12px
 }
 
 label {
-  font-size: 12px;
-  opacity: .9
+  font-size: 13px;
+  color: var(--muted)
 }
 
 input,
 select,
-textarea {
-  background: #0f1732;
-  color: var(--text);
-  border: 1px solid rgba(255, 255, 255, .1);
-  border-radius: 10px;
-  padding: 8px 10px;
-  outline: none
-}
-
+button,
 textarea {
   width: 100%;
-  min-height: 80px;
-  resize: vertical
-}
-
-.btn {
-  background: var(--brand);
-  color: #fff;
-  border: none;
+  padding: 10px 12px;
   border-radius: 10px;
-  padding: 8px 12px;
-  cursor: pointer
+  border: 1px solid #223;
+  background: #0f1530;
+  color: var(--text);
 }
 
-.btn:disabled {
-  opacity: .6;
-  cursor: not-allowed
+button {
+  cursor: pointer;
+  background: var(--brand);
+  border: none
 }
 
-.btn.ghost {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, .2)
-}
-
-.hint {
-  font-size: 12px;
-  color: var(--muted)
-}
-
-.role-badge {
-  font-size: 12px;
-  background: #0f1a36;
-  border: 1px solid rgba(255, 255, 255, .1);
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
   border-radius: 999px;
-  padding: 4px 8px
-}
-
-.toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px
-}
-
-.notice textarea {
-  font-size: 14px
-}
-
-.table-wrap {
-  overflow: auto
+  background: #15204a;
+  color: #a9c2ff;
+  font-size: 12px
 }
 
 table {
   width: 100%;
-  border-collapse: collapse
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 14px
 }
 
 th,
 td {
-  border-bottom: 1px solid rgba(255, 255, 255, .06);
-  padding: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  padding: 8px 6px;
   text-align: left
 }
 
 th {
-  font-size: 13px;
-  color: #bcd1ff
+  color: #aac2ff
 }
 
-.empty {
-  color: var(--muted);
-  text-align: center
+hr {
+  border: none;
+  height: 1px;
+  background: rgba(255, 255, 255, .08);
+  margin: 16px 0
 }
 
-.footer {
-  margin-top: auto;
-  color: #9fb3d6;
-  opacity: .7;
+.small {
   font-size: 12px;
-  padding: 18px;
-  text-align: center
+  color: var(--muted)
 }
 
+.warn {
+  color: var(--danger)
+}
 
-/* 모달 */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, .45);
+.right {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px
-}
-
-.modal {
-  width: min(640px, 100%);
-  background: var(--card);
-  border: 1px solid rgba(255, 255, 255, .08);
-  border-radius: 16px;
-  padding: 14px
-}
-
-.modal h3 {
-  margin: 6px 0 10px
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: 10px
-}
-
-.row.end {
-  justify-content: flex-end
-}
-
-.muted {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 6px
-}
-
-
-@media (max-width:640px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
+  justify-content: flex-end;
+  gap: 8px
 }
