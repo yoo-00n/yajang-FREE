@@ -8,7 +8,6 @@ import {
   getRoleInWorkspace,
   wsNoticeDocRef,
   obsColRef,
-  serverTimestamp,
   enableOffline,
 } from './lib/firebase.js'
 import { onAuthStateChanged } from 'firebase/auth'
@@ -203,10 +202,10 @@ export default function App() {
         heightMode: form.heightMode || '',
         stationName: form.stationName || '',
         createdBy: user.uid,
-        updatedAt: serverTimestamp(),
+        updatedAt: svt(),
       }
       if (!editingDocId) {
-        payload.createdAt = serverTimestamp()
+        payload.createdAt = svt()
       }
 
 
@@ -232,7 +231,7 @@ export default function App() {
     setNoticeLoading(true)
     try {
       const ref = wsNoticeDocRef(wsId)
-      await setDoc(ref, { text: notice, updatedAt: serverTimestamp(), updatedBy: user.uid }, { merge: true })
+      await setDoc(ref, { text: notice, updatedAt: svt(), updatedBy: user.uid }, { merge: true })
     } catch (e) {
       console.error(e)
     } finally {
