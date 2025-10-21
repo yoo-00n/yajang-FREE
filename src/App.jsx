@@ -1,16 +1,21 @@
 import React, { useEffect, useState } from "react";
 import { auth, db } from "./lib/firebase";
 window.auth = auth;
+
 import {
   signInAnonymously,
   onAuthStateChanged,
-  updateProfile
+  updateProfile,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
 } from "firebase/auth";
 import {
   doc, getDoc, setDoc, collection, addDoc, serverTimestamp,
   query, where, onSnapshot, orderBy, updateDoc
 } from "firebase/firestore";
 
+/* ========= 공용 유틸 ========= */
 // 프로젝트 비번 해시 생성용(브라우저 Web Crypto)
 async function sha256(text) {
   const enc = new TextEncoder().encode(text);
@@ -21,35 +26,41 @@ const STATIC_SALT = "pnu-v1"; // 바꾸면 기존 프로젝트 joinCodeHash 재�
 
 function useAuth() {
   const [user, setUser] = useState(null);
-  useEffect(() => {
-    return onAuthStateChanged(auth, setUser);
-  }, []);
+  useEffect(() => onAuthStateChanged(auth, setUser), []);
   return user;
 }
 
+/* ========= 메인 App ========= */
 export default function App() {
   const user = useAuth();
+  const SUPER_ADMINS = new Set(["sZyql3B9HaedVxlzB8jknCBWPfy2"]);
+  const isSuper = !!user && SUPER_ADMINS.has(user.uid);
   const [projectId, setProjectId] = useState(localStorage.getItem("pid") || "");
   const [observerName, setObserverName] = useState(localStorage.getItem("observerName") || "");
   const [role, setRole] = useState(localStorage.getItem("role") || "none");
   const [joinPassword, setJoinPassword] = useState("");
   const [projectMeta, setProjectMeta] = useState(null);
-  const [canCreate, setCanCreate] = useState(false);
+  const [canCreate, setCanCreate] = useState(false);   // orgRoles 전역 권한
+  const [authBusy, setAuthBusy] = useState(false);
+  const isSignedIn = !!user;
+  const displayName = user?.displayName || "(미로그인)";
+  const joinedProject = !!user && role !== "none";
 
-  // 로그인 후 한번 확인
+  // 로그인 후 전역 매니저 권한(orgRoles) 확인
   useEffect(() => {
     if (!user) return;
     (async () => {
       try {
         const snap = await getDoc(doc(db, "orgRoles", user.uid));
         setCanCreate(!!snap.exists() && snap.data().canCreateProject === true);
-      } catch { }
+      } catch { setCanCreate(false); }
     })();
   }, [user]);
 
-  // 로그인 후 내 역할 불러오기
+  // 프로젝트 선택 바뀔 때 내 역할 불러오기
   useEffect(() => {
     if (!user || !projectId) return;
+    setRole("none");
     const mref = doc(db, "projects", projectId, "members", user.uid);
     getDoc(mref).then(snap => {
       if (snap.exists()) {
@@ -67,30 +78,53 @@ export default function App() {
     }).catch(() => { });
   }, [user, projectId]);
 
-  // 프로젝트 메타(이름 등)
+  // 프로젝트 메타(표시 이름 등)
   useEffect(() => {
     if (!projectId) return;
     getDoc(doc(db, "projects", projectId)).then(s => {
       setProjectMeta(s.exists() ? s.data() : null);
-    });
+    }).catch(() => setProjectMeta(null));
   }, [projectId]);
 
-  const loggedIn = !!user && role !== "none";
+  // 관리자/담당자 로그인/로그아웃 버튼
+  async function handleLogin() {
+    setAuthBusy(true);
+    try {
+      if (auth.currentUser && auth.currentUser.isAnonymous) {
+        await signOut(auth);
+      }
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      await signInWithPopup(auth, provider);
+    } catch { /* noop */ }
+    finally { setAuthBusy(false); }
+  }
+  async function handleLogout() {
+    setAuthBusy(true);
+    try { await signOut(auth); }
+    finally {
+      setAuthBusy(false);
+      setRole("none");
+      localStorage.removeItem("role");
+    }
+  }
 
-  // 참여(회원가입 겸 로그인)
+  // 참여(회원가입 겸 익명 로그인)
   async function handleJoin(e) {
     e.preventDefault();
     if (!projectId || !observerName || !joinPassword) {
-      alert("프로젝트ID / 관측자명 / 프로젝트 비밀번호를 입력하세요."); return;
+      alert("프로젝트ID / 관측자명 / 프로젝트 비밀번호를 입력하세요.");
+      return;
     }
-    // 익명 로그인
+
+    // 익명 로그인(참여 시점에만)
     if (!auth.currentUser) await signInAnonymously(auth);
     const uid = auth.currentUser.uid;
 
-    // joinHash 생성
+    // joinHash 생성(비번|프로젝트ID|STATIC_SALT)
     const joinHash = await sha256(`${joinPassword}|${projectId}|${STATIC_SALT}`);
 
-    // members/{uid} 생성 시도(규칙에서 joinHash 비교)
+    // members/{uid} 생성 시도(규칙에서 secret/join.joinCodeHash 비교)
     const mref = doc(db, "projects", projectId, "members", uid);
     await setDoc(mref, {
       role: "observer",
@@ -109,10 +143,32 @@ export default function App() {
 
   return (
     <div className="container">
+      {/* 헤더 */}
+      <div className="row" style={{ alignItems: "center", marginBottom: 8 }}>
+        <div className="col">
+          <div className="small" style={{ opacity: .8 }}>
+            누구나 접속 가능 · 프로젝트ID+비밀번호 공유 · 관측자명은 임의로 입력
+          </div>
+        </div>
+        <div className="col" style={{ textAlign: "right" }}>
+          {isSignedIn ? (
+            <>
+              <span className="small" style={{ marginRight: 8 }}>
+                {displayName} <span className="badge">{role === "none" ? "게스트" : role}</span>
+              </span>
+              <button onClick={handleLogout} disabled={authBusy}>로그아웃</button>
+            </>
+          ) : (
+            <button onClick={handleLogin} disabled={authBusy}>로그인(관리자/담당자)</button>
+          )}
+        </div>
+      </div>
+
+      {/* 참여 / 로그인 박스 */}
       <div className="row">
         <div className="col">
           <div className="card">
-            <h1>프로젝트 참여 / 로그인</h1>
+            <h1>프로젝트 참여</h1>
             <form onSubmit={handleJoin} className="row">
               <div className="col">
                 <label>프로젝트 ID</label>
@@ -133,58 +189,63 @@ export default function App() {
             </form>
             <hr />
             <div className="small">
-              로그인 UID: {user?.uid || "-"} &nbsp;&nbsp;|&nbsp;&nbsp; 역할: <span className="badge">{role}</span>
-              <br />
+              로그인 UID: {user?.uid || "-"} &nbsp;&nbsp;|&nbsp;&nbsp;
+              역할: <span className="badge">{role === "none" ? "게스트" : role}</span><br />
               현재 프로젝트: {projectId || "-"} {projectMeta?.name ? <span className="small">({projectMeta.name})</span> : null}
             </div>
           </div>
         </div>
       </div>
 
-      {loggedIn ? (
+      {/* 프로젝트 참여 후: 야장 입력 */}
+      {joinedProject ? (
         <>
           <div className="row" style={{ marginTop: 16 }}>
             <div className="col">
               <RecordsPanel projectId={projectId} role={role} observerName={observerName} />
             </div>
           </div>
-
-          <div className="row" style={{ marginTop: 16 }}>
-            {(role === "manager" || role === "admin" || canCreate) && (
-              <div className="col">
-                <ManagerPanel projectId={projectId} />
-              </div>
-            )}
-            {(role === "admin") && (
-              <div className="col">
-                <AdminPanel projectId={projectId} />
-              </div>
-            )}
-          </div>
         </>
       ) : (
         <div className="row" style={{ marginTop: 16 }}>
           <div className="col">
-            <div className="card small">프로젝트에 참여하면, 관측자는 **자기 데이터만** 보이고, 담당자/관리자는 **전체 데이터**를 조회할 수 있습니다.</div>
+            <div className="card small">
+              프로젝트에 참여하면, 관측자는 <b>자기 데이터만</b> 보이고, 담당자/관리자는 <b>전체 데이터</b>를 조회할 수 있습니다.
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* 로그인한 상태(멤버 아니어도) 권한 있으면 관리 패널 노출 */}
+      {isSignedIn && (
+        <div className="row" style={{ marginTop: 16 }}>
+          {(role === "manager" || role === "admin" || canCreate) && (
+            <div className="col">
+              <ManagerPanel projectId={projectId} />
+            </div>
+          )}
+          {(role === "admin" || isSuper) && (
+            <div className="col">
+              <AdminPanel projectId={projectId} />
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-/** 관측자/담당자 공통: 레코드 작성/조회 */
+/* ========= 관측자/담당자 공통: 레코드 작성/조회 ========= */
 function RecordsPanel({ projectId, role, observerName }) {
   const [form, setForm] = useState({ pointName: "", startAt: "", endAt: "", memo: "" });
   const [rows, setRows] = useState([]);
 
-  // 목록 구독: 관측자는 본인 것만, 매니저/어드민은 전체
   useEffect(() => {
-    if (!auth.currentUser) return;
-    const col = collection(db, "projects", projectId, "records");
+    if (!auth.currentUser || !projectId) return;
+    const colRef = collection(db, "projects", projectId, "records");
     const q = (role === "manager" || role === "admin")
-      ? query(col, orderBy("createdAt", "desc"))
-      : query(col, where("observerUid", "==", auth.currentUser.uid), orderBy("createdAt", "desc"));
+      ? query(colRef, orderBy("createdAt", "desc"))
+      : query(colRef, where("observerUid", "==", auth.currentUser.uid), orderBy("createdAt", "desc"));
     const off = onSnapshot(q, snap => {
       setRows(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
@@ -193,9 +254,9 @@ function RecordsPanel({ projectId, role, observerName }) {
 
   async function saveRecord(e) {
     e.preventDefault();
-    if (!auth.currentUser) return;
-    const col = collection(db, "projects", projectId, "records");
-    await addDoc(col, {
+    if (!auth.currentUser || !projectId) return;
+    const colRef = collection(db, "projects", projectId, "records");
+    await addDoc(colRef, {
       observerUid: auth.currentUser.uid,
       observerName: observerName || auth.currentUser.displayName || "",
       pointName: form.pointName || "",
@@ -258,7 +319,7 @@ function RecordsPanel({ projectId, role, observerName }) {
   )
 }
 
-/** 매니저 : 프로젝트 생성 + 전체 데이터 조회 */
+/* ========= 매니저: 프로젝트 생성 ========= */
 function ManagerPanel({ projectId }) {
   const [newProjectId, setNewProjectId] = useState("");
   const [newPwd, setNewPwd] = useState("");
@@ -269,11 +330,19 @@ function ManagerPanel({ projectId }) {
       alert("프로젝트ID와 비밀번호를 입력하세요."); return;
     }
     const joinCodeHash = await sha256(`${newPwd}|${newProjectId}|${STATIC_SALT}`);
+
+    // 공개 메타
     await setDoc(doc(db, "projects", newProjectId), {
       name: projName || newProjectId,
+      createdAt: serverTimestamp()
+    }, { merge: true });
+
+    // 비공개 해시 저장
+    await setDoc(doc(db, "projects", newProjectId, "secret", "join"), {
       joinCodeHash,
       createdAt: serverTimestamp()
     }, { merge: true });
+
     alert("새 프로젝트를 생성했습니다.");
     setNewProjectId(""); setNewPwd(""); setProjName("");
   }
@@ -303,7 +372,7 @@ function ManagerPanel({ projectId }) {
   );
 }
 
-/** 최고관리자: 프로젝트 생성/비번 변경, 역할 부여 */
+/* ========= 최고관리자: 비번 변경/역할 부여 ========= */
 function AdminPanel({ projectId }) {
   const [projName, setProjName] = useState("");
   const [newPwd, setNewPwd] = useState("");
@@ -313,11 +382,17 @@ function AdminPanel({ projectId }) {
   async function setProjectPassword() {
     if (!projectId || !newPwd) { alert("프로젝트ID/새 비밀번호 입력"); return; }
     const joinCodeHash = await sha256(`${newPwd}|${projectId}|${STATIC_SALT}`);
+
     await setDoc(doc(db, "projects", projectId), {
       name: projName || projectId,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    await setDoc(doc(db, "projects", projectId, "secret", "join"), {
       joinCodeHash,
       updatedAt: serverTimestamp()
     }, { merge: true });
+
     setNewPwd("");
     alert("프로젝트 비밀번호(해시)를 설정/갱신했습니다.");
   }
